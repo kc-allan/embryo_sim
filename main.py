@@ -1,9 +1,10 @@
 import argparse
 import json
 import sys
+from dataclasses import replace
 
 from biology.cell import FATE_NAMES
-from core.simulation import Simulation
+from core.simulation import Simulation, SimulationConfig
 from visualization.renderer import render_svg
 
 
@@ -65,12 +66,16 @@ def main() -> None:
     parser.add_argument("--steps", type=int, default=240, help="number of simulation steps")
     parser.add_argument("--seed", type=int, default=7, help="random seed")
     parser.add_argument("--output", default="output/development.svg", help="SVG snapshot path")
+    parser.add_argument("--recording-mode", choices=("minimal", "standard", "trace"), default="standard", help="amount of simulation history to retain")
     parser.add_argument("-v", "--verbose", action="count", default=0, help="increase run detail (repeat up to three times)")
     parser.add_argument("--trace-cell", type=int, help="print the complete lineage and state history for a cell ID")
     args = parser.parse_args()
     verbosity = min(args.verbose, 3)
 
-    simulation = Simulation(seed=args.seed)
+    config = SimulationConfig(recording_mode=args.recording_mode)
+    if args.trace_cell is not None or args.verbose >= 3:
+        config = replace(config, recording_mode="trace")
+    simulation = Simulation(seed=args.seed, config=config)
     steps = max(args.steps, 0)
     if verbosity == 0:
         simulation.run(steps)

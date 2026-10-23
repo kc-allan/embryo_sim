@@ -23,8 +23,8 @@ The current 2D model initializes a founder cell and includes:
 - A diffusing, degrading extracellular signaling field and a designated signal source.
 - Simplified two-factor regulatory activity and rule-based fate transitions.
 - Inherited terminal fate labels (Type A and Type C) and a transitional Type B label.
-- Simple center-based mechanics with local forces; **cell-type-dependent adhesion is not yet implemented**.
-- Optional mechanism ablations, cell histories, population summaries, morphogen mass accounting, and an SVG snapshot.
+- Versioned finite-range center-based mechanics with an all-pairs reference implementation; **cell-type-dependent adhesion is not implemented**.
+- Configurable minimal, standard, and trace recording, event and lineage records, mass accounting, ablations, and an SVG snapshot.
 
 **Interpretation caveat:** Type A and Type C are abstract labels, not verified biological cell types. The current terminal labels can persist after the underlying gene activities change. Commitment is presently a rule for label inheritance, **not a demonstrated self-maintaining regulatory mechanism**. Type B can transition to Type A. These choices are provisional and explicitly under investigation.
 
@@ -40,6 +40,8 @@ Requires Python 3.12 and NumPy in a configured environment.
 
 The command prints a JSON summary and writes an SVG snapshot. The visual encodings are: blue haze for signal concentration, cell colors for fate labels, and a pale ring for the signal source. `--steps`, `--seed`, and `--output` control run length, reproducibility seed, and output path. `-v`, `-vv`, and `-vvv` provide progressively detailed diagnostics on stderr.
 
+Recording defaults to `standard`: periodic aggregate metrics, events, and cell snapshots. Choose `--recording-mode minimal` for aggregate metrics and events or `--recording-mode trace` for complete per-step cell and field diagnostics. `--trace-cell` and `-vvv` automatically use trace recording.
+
 To trace a cell's ancestry and per-step state:
 
 ```bash
@@ -54,6 +56,8 @@ To run mechanism ablations, seed comparisons and a timestep comparison:
 
 `biology/` contains the cellular rules; `core/` contains the simulation loop, environment, mechanics, and scheduler; `analysis/` contains experiments and diagnostics; `visualization/` handles outputs.
 
+See [model specification](docs/model-specification.md), [numerical methods](docs/numerical-methods.md), [validation record](docs/validation.md), and [architecture](docs/architecture.md) for equations, assumptions, verification, and extension guidance.
+
 ## What existing experiments do and do not demonstrate
 
 - **Demonstrated:** The implementation produces division, lineage inheritance, a diffusing signal field, abstract fate changes, and multicellular spatial arrangements.
@@ -61,14 +65,19 @@ To run mechanism ablations, seed comparisons and a timestep comparison:
 - **Mechanism tests:** Disabling signaling removes Type A in the tested setting; disabling adhesion changes compaction and proliferation; disabling chemotaxis has little effect on the tested endpoint.
 - **Not yet established:** Biologically realistic identity maintenance, differential cell sorting, parameter convergence, physiological timescales, validated embryonic structures, or organism-level development.
 
+## Current numerical and model status
+
+The chemical field uses a cell-centered grid, explicit reaction-diffusion update, and no-flux outer boundary. Source deposition conserves its integrated amount under grid refinement. Mechanics is `finite-range-v2`: overlap repulsion and finite-range attraction replace the historical unbounded attraction. This model revision changes trajectories and is not expected to reproduce previous outcomes. A uniform spatial hash accelerates mechanical and crowding neighbors; performance measurements and verification limits are recorded in `docs/validation.md`.
+
+An isolated toggle-network experiment tests feedback and signal-pulse persistence. It is not coupled to default cells, whose regulatory activity remains a simple signal-response model. A numerical example of bistability is not evidence of biological commitment.
+
 ## Next scientific and engineering milestones
 
-1. Specify precisely what regulatory state, fate label, developmental commitment, and phenotype each mean; introduce and test a mechanistic commitment model.
-2. Test the numerical pieces independently, including diffusion conservation/convergence, regulatory fixed points, and mechanical force equivalence.
-3. Replace all-pairs mechanical neighbor enumeration with a spatial index while retaining the reference solver and verifying equivalent forces for identical states.
-4. Introduce configurable telemetry modes and benchmark mechanics, fields, biology, and logging separately.
-5. Test timestep/grid convergence and robustness across repeated seeds; report quantitative morphology rather than relying on a snapshot.
-6. Add cell-type-dependent mechanics or signaling feedback only with an explicit hypothesis and measurable validation target.
+1. Quantify parameter sensitivity and identify which model outcomes are robust across plausible parameter ranges.
+2. Expand timestep and grid convergence reports beyond isolated field modes to coupled runs and chosen observables.
+3. Validate analysis measures on synthetic arrangements and add larger seed ensembles with uncertainty summaries.
+4. Record model-version metadata in each experiment artifact and add reproducible checkpointing for long runs.
+5. Consider new biological mechanisms only after defining an isolated hypothesis, measurable target, and appropriate empirical comparison.
 
 ## Scope and limitations
 

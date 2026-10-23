@@ -1,0 +1,58 @@
+{
+  "seed": 123,
+  "units": "seconds per operation",
+  "populations": [
+    {
+      "cells": 100,
+      "mechanics_indexed": 0.0007448226679116488,
+      "mechanics_position_update": 0.000858750679374983,
+      "mechanics_reference": 0.043372537998948246,
+      "neighbor_queries": 0.0005534239850627879,
+      "cell_cycle_scheduler": 0.0007438793351563314,
+      "chemical_field": 0.00025350132879490655,
+      "gene_update_per_cell": 1.0821201023645699e-05,
+      "event_recording": 1.1930102482438088e-05,
+      "serialization": 0.0003390896793765326,
+      "rendering": 0.001354164007352665
+    },
+    {
+      "cells": 300,
+      "mechanics_indexed": 0.0021789826763172946,
+      "mechanics_position_update": 0.0022552110021933913,
+      "mechanics_reference": 0.302965494513046,
+      "neighbor_queries": 0.001649567993202557,
+      "cell_cycle_scheduler": 0.0023712353237594166,
+      "chemical_field": 0.0002483619997898738,
+      "gene_update_per_cell": 1.0955503967124969e-05,
+      "event_recording": 3.581889905035496e-05,
+      "serialization": 0.0009862883404518168,
+      "rendering": 0.0016703270084690303
+    },
+    {
+      "cells": 1000,
+      "mechanics_indexed": 0.007665170667072137,
+      "mechanics_position_update": 0.008800020344400158,
+      "mechanics_reference": null,
+      "neighbor_queries": 0.00543629500316456,
+      "cell_cycle_scheduler": 0.008249817338461677,
+      "chemical_field": 0.00046938331797719,
+      "gene_update_per_cell": 1.1898647004272788e-05,
+      "event_recording": 0.00015111200045794248,
+      "serialization": 0.003248197336991628,
+      "rendering": 0.003258932993048802
+    },
+    {
+      "cells": 3000,
+      "mechanics_indexed": 0.03769714534670735,
+      "mechanics_position_update": 0.03861002998504167,
+      "mechanics_reference": null,
+      "neighbor_queries": 0.0172617316711694,
+      "cell_cycle_scheduler": 0.032292813334303595,
+      "chemical_field": 0.0008715240013164779,
+      "gene_update_per_cell": 1.2327531992923468e-05,
+      "event_recording": 0.0005277418997138739,
+      "serialization": 0.010449212005672356,
+      "rendering": 0.00906118200509809
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "environment": "Python 3.12.3, NumPy, local development container",
+  "method": "single perf_counter measurement per component; sparse seeded positions in a 1000-unit square",
+  "units": "seconds per update",
+  "results": [
+    {"cells": 100, "all_pairs_mechanics": 0.003128, "all_pairs_scheduler": 0.021998},
+    {"cells": 300, "all_pairs_mechanics": 0.014281, "all_pairs_scheduler": 0.198050},
+    {"cells": 1000, "all_pairs_mechanics": 0.362522, "all_pairs_scheduler": 2.217654},
+    {"cells": 3000, "all_pairs_mechanics": 3.992981, "all_pairs_scheduler": 20.376607}
+  ]
+}

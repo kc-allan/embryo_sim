@@ -27,8 +27,8 @@ def render_svg(world: World, tick: int, output: str | Path) -> Path:
             intensity = float(field[iy, ix])
             if intensity < 0.025:
                 continue
-            x = margin + ix * cell_size * scale
-            y = margin + (world.grid_size - 1 - iy) * cell_size * scale
+            x = margin + (ix + 0.5) * cell_size * scale
+            y = margin + (world.grid_size - iy - 0.5) * cell_size * scale
             opacity = min(0.44, intensity * 0.45)
             parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{rect_size:.1f}" height="{rect_size:.1f}" fill="#53b7d2" opacity="{opacity:.3f}"/>')
 

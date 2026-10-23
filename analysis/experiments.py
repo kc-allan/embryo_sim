@@ -1,12 +1,13 @@
 """Run controlled mechanism and robustness comparisons for the default model."""
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 import json
 
 import numpy as np
 
 from biology.cell import FATE_NAMES
 from core.simulation import Simulation, SimulationConfig
+from core.mechanics import MECHANICS_MODEL_VERSION
 
 
 def describe(simulation: Simulation) -> dict:
@@ -23,9 +24,13 @@ def describe(simulation: Simulation) -> dict:
         members = [cell for cell in cells if cell.fate == fate]
         if members:
             centroids[name] = np.mean([cell.position for cell in members], axis=0).tolist()
-            signal_by_fate[name] = round(float(np.mean([
-                simulation.world.sample_morphogen(cell.position) for cell in members
-            ])), 5)
+            values = np.array([simulation.world.sample_morphogen(cell.position) for cell in members])
+            signal_by_fate[name] = {
+                "mean": round(float(values.mean()), 5),
+                "q25": round(float(np.quantile(values, 0.25)), 5),
+                "median": round(float(np.quantile(values, 0.5)), 5),
+                "q75": round(float(np.quantile(values, 0.75)), 5),
+            }
 
     centroid_points = np.array(list(centroids.values()))
     centroid_separation = None
@@ -34,47 +39,53 @@ def describe(simulation: Simulation) -> dict:
         distances = np.linalg.norm(pairwise, axis=2)
         centroid_separation = round(float(distances[np.triu_indices(len(distances), 1)].mean()), 5)
 
-    fate_values = np.array([cell.fate for cell in cells], dtype=float)
-    local_signals = np.array([
-        simulation.world.sample_morphogen(cell.position) for cell in cells
-    ])
-    correlation = None
-    if len(cells) > 1 and np.std(fate_values) > 0 and np.std(local_signals) > 0:
-        correlation = round(float(np.corrcoef(fate_values, local_signals)[0, 1]), 5)
+    fate_proportions = {
+        name: round(count / len(cells), 5) if cells else 0.0
+        for name, count in counts.items()
+    }
+    transition_signal = {}
+    for event in simulation.events:
+        if event.get("type") == "fate_transition":
+            transition_signal.setdefault(event["to"], []).append(float(event["signal"]))
+    transition_exposure = {
+        fate: {"count": len(values), "mean_signal": round(float(np.mean(values)), 5)}
+        for fate, values in transition_signal.items()
+    }
 
-    mass_history = simulation.world.mass_history
     return {
         "seed": simulation.seed,
+        "model_version": "prototype-2026.10",
+        "mechanics_model_version": MECHANICS_MODEL_VERSION,
+        "configuration": asdict(simulation.config),
         "steps": simulation.tick,
         "time": round(simulation.tick * simulation.config.dt, 4),
         "dt": simulation.config.dt,
         "cells": len(cells),
         "fates": counts,
+        "fate_proportions": fate_proportions,
         "divisions": sum(event["type"] == "division" for event in simulation.events),
         "fate_transitions": sum(event["type"] == "fate_transition" for event in simulation.events),
         "mean_distance_from_colony_center": round(float(np.linalg.norm(positions - center, axis=1).mean()), 5) if len(cells) else 0,
         "mean_fate_centroid_separation": centroid_separation,
         "fate_centroids": centroids,
         "mean_signal_by_fate": signal_by_fate,
-        "fate_signal_correlation": correlation,
+        "transition_signal_by_destination_fate": transition_exposure,
         "morphogen_mass": round(float(
             simulation.world.morphogen.sum() * simulation.world.spacing**2
         ), 6),
         "mass_budget": {
-            key: round(sum(float(row[key]) for row in mass_history), 8)
+            key: round(float(simulation.mass_totals[key]), 8)
             for key in (
                 "diffusion_delta",
                 "degradation_delta",
                 "secretion_added",
                 "uptake_removed",
+                "field_reset_removed",
                 "clipping_removed",
                 "boundary_removed",
             )
         },
-        "max_mass_balance_residual": max(
-            (abs(float(row["residual"])) for row in simulation.world.mass_history),
-            default=0.0,
-        ),
+        "max_mass_balance_residual": simulation.max_mass_balance_residual,
     }
 
 

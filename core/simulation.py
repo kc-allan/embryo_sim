@@ -17,12 +17,18 @@ class SimulationConfig:
     dt: float = 0.08
     diffusion: float = 0.8
     decay: float = 0.12
-    secretion: float = 4.0
+    # Integrated morphogen amount per model-time unit. Chosen to preserve
+    # the old default's 4 concentration-units/time at one grid node.
+    secretion: float = 4.0 * (80.0 / 127.0) ** 2
     division_period: float = 1.7
     cell_radius: float = 1.7
     mobility: float = 0.85
     adhesion: float = 0.035
-    max_cells: int = 300
+    repulsion: float = 1.8
+    adhesion_range: float = 1.2
+    max_cells: int = 1500
+    recording_mode: str = "standard"
+    recording_interval: int = 10
     signaling_enabled: bool = True
     proliferation_enabled: bool = True
     chemotaxis_enabled: bool = True
@@ -34,11 +40,37 @@ class Simulation:
     def __init__(self, seed: int = 7, config: SimulationConfig | None = None):
         self.seed = seed
         self.config = config or SimulationConfig()
+        if (self.config.dt <= 0 or self.config.world_size <= 0
+                or self.config.max_cells < 1 or self.config.grid_size < 3):
+            raise ValueError("dt/world_size must be positive, grid_size at least three, and max_cells at least one")
+        if self.config.division_period <= 0 or min(
+            self.config.diffusion, self.config.decay, self.config.secretion
+        ) < 0:
+            raise ValueError("division period must be positive and field rates nonnegative")
+        field_spacing = self.config.world_size / self.config.grid_size
+        if self.config.dt * (4 * self.config.diffusion / field_spacing**2 + self.config.decay) > 1.0 + 1e-12:
+            raise ValueError("configured field update violates the nonnegative stability bound")
+        if (self.config.cell_radius <= 0 or self.config.mobility < 0
+                or self.config.adhesion < 0 or self.config.repulsion < 0
+                or self.config.adhesion_range <= 0
+                or self.config.cell_radius >= self.config.world_size / 2):
+            raise ValueError("cell radius and adhesion range must be positive; mechanical values nonnegative")
+        if self.config.recording_mode not in {"minimal", "standard", "trace"}:
+            raise ValueError("recording_mode must be minimal, standard, or trace")
+        if self.config.recording_interval < 1:
+            raise ValueError("recording_interval must be positive")
         self.rng = np.random.default_rng(seed)
         self.world = World(size=self.config.world_size, grid_size=self.config.grid_size)
         self.tick = 0
         self.next_cell_id = 1
         self.events: list[dict] = []
+        self.metrics: list[dict] = []
+        self.snapshots: list[list[dict]] = []
+        self.mass_totals = {key: 0.0 for key in (
+            "diffusion_delta", "degradation_delta", "secretion_added",
+            "uptake_removed", "field_reset_removed", "clipping_removed", "boundary_removed",
+        )}
+        self.max_mass_balance_residual = 0.0
         self.world.cells.append(Cell(
             id=0,
             parent_id=None,
@@ -53,13 +85,19 @@ class Simulation:
     def step(self) -> World:
         config = self.config
         dt = config.dt
-        self.world.update_morphogen(
+        mass_diagnostic = self.world.update_morphogen(
             dt,
             config.diffusion,
             config.decay,
             config.secretion,
             tick=self.tick + 1,
             enabled=config.signaling_enabled,
+            record=config.recording_mode == "trace",
+        )
+        for key in self.mass_totals:
+            self.mass_totals[key] += float(mass_diagnostic[key])
+        self.max_mass_balance_residual = max(
+            self.max_mass_balance_residual, abs(float(mass_diagnostic["residual"]))
         )
         for cell in self.world.cells:
             if not cell.alive:
@@ -133,10 +171,21 @@ class Simulation:
             config.mobility,
             config.adhesion,
             chemotaxis=config.chemotaxis_enabled,
+            repulsion=config.repulsion,
+            adhesion_range=config.adhesion_range,
         )
         self.tick += 1
+        if self.tick % config.recording_interval == 0:
+            self.metrics.append(self.summary())
+        if (config.recording_mode == "standard"
+                and self.tick % config.recording_interval == 0):
+            self.snapshots.append([{
+                "id": cell.id, "parent_id": cell.parent_id,
+                "position": cell.position.tolist(), "fate": FATE_NAMES[cell.fate],
+                "gene_expression": cell.gene_expression.tolist(),
+            } for cell in self.world.cells if cell.alive])
         for cell in self.world.cells:
-            if not cell.alive:
+            if not cell.alive or config.recording_mode != "trace":
                 continue
             cell.history.append({
                 "tick": self.tick,
@@ -153,6 +202,8 @@ class Simulation:
     def run(self, steps: int) -> World:
         for _ in range(max(0, steps)):
             self.step()
+        if not self.metrics or self.metrics[-1]["tick"] != self.tick:
+            self.metrics.append(self.summary())
         return self.world
 
     def summary(self) -> dict[str, int | float]:
