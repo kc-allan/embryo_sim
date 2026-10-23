@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -15,6 +15,7 @@ class Cell:
     fate: int = 0
     alive: bool = True
     organizer: bool = False
+    history: list[dict] = field(default_factory=list, repr=False)
 
 
 FATE_NAMES = ("Stem", "Type A", "Type B", "Type C")

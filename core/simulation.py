@@ -23,17 +23,22 @@ class SimulationConfig:
     mobility: float = 0.85
     adhesion: float = 0.035
     max_cells: int = 300
+    signaling_enabled: bool = True
+    proliferation_enabled: bool = True
+    chemotaxis_enabled: bool = True
 
 
 class Simulation:
     """Reproducible 2D cell model for exploring local rules and patterning."""
 
     def __init__(self, seed: int = 7, config: SimulationConfig | None = None):
+        self.seed = seed
         self.config = config or SimulationConfig()
         self.rng = np.random.default_rng(seed)
         self.world = World(size=self.config.world_size, grid_size=self.config.grid_size)
         self.tick = 0
         self.next_cell_id = 1
+        self.events: list[dict] = []
         self.world.cells.append(Cell(
             id=0,
             parent_id=None,
@@ -48,15 +53,45 @@ class Simulation:
     def step(self) -> World:
         config = self.config
         dt = config.dt
-        self.world.update_morphogen(dt, config.diffusion, config.decay, config.secretion)
+        self.world.update_morphogen(
+            dt,
+            config.diffusion,
+            config.decay,
+            config.secretion,
+            tick=self.tick + 1,
+            enabled=config.signaling_enabled,
+        )
         for cell in self.world.cells:
             if not cell.alive:
                 continue
             signal = self.world.sample_morphogen(cell.position)
+            previous_fate = cell.fate
+            previous_expression = cell.gene_expression.copy()
             cell.gene_expression = update_expression(cell.gene_expression, signal, dt)
             update_fate(cell, signal)
+            if cell.fate != previous_fate:
+                self.events.append({
+                    "type": "fate_transition",
+                    "tick": self.tick + 1,
+                    "time": (self.tick + 1) * dt,
+                    "cell_id": cell.id,
+                    "from": FATE_NAMES[previous_fate],
+                    "to": FATE_NAMES[cell.fate],
+                    "age": cell.age,
+                    "position": cell.position.tolist(),
+                    "signal": signal,
+                    "gene_expression_before": previous_expression.tolist(),
+                    "gene_expression_after": cell.gene_expression.tolist(),
+                    "parent_id": cell.parent_id,
+                })
 
-        ready = advance_cell_cycles(self.world, dt, config.division_period, config.max_cells)
+        ready = advance_cell_cycles(
+            self.world,
+            dt,
+            config.division_period,
+            config.max_cells,
+            enabled=config.proliferation_enabled,
+        )
         for parent in ready:
             if len(self.world.cells) >= config.max_cells:
                 break
@@ -76,10 +111,43 @@ class Simulation:
                 fate=parent.fate,
                 organizer=False,
             ))
+            daughter = self.world.cells[-1]
+            self.events.append({
+                "type": "division",
+                "tick": self.tick + 1,
+                "time": (self.tick + 1) * dt,
+                "parent_id": parent.id,
+                "daughter_id": daughter.id,
+                "inherited_fate": FATE_NAMES[daughter.fate],
+                "parent_age": parent.age,
+                "parent_position": parent.position.tolist(),
+                "daughter_position": daughter.position.tolist(),
+                "parent_gene_expression": parent.gene_expression.tolist(),
+                "daughter_gene_expression": daughter.gene_expression.tolist(),
+            })
             self.next_cell_id += 1
 
-        update_positions(self.world, dt, config.mobility, config.adhesion)
+        update_positions(
+            self.world,
+            dt,
+            config.mobility,
+            config.adhesion,
+            chemotaxis=config.chemotaxis_enabled,
+        )
         self.tick += 1
+        for cell in self.world.cells:
+            if not cell.alive:
+                continue
+            cell.history.append({
+                "tick": self.tick,
+                "time": self.tick * dt,
+                "age": cell.age,
+                "position": cell.position.tolist(),
+                "fate": FATE_NAMES[cell.fate],
+                "signal": self.world.sample_morphogen(cell.position),
+                "gene_expression": cell.gene_expression.tolist(),
+                "cycle_progress": cell.cycle_progress,
+            })
         return self.world
 
     def run(self, steps: int) -> World:
@@ -97,5 +165,6 @@ class Simulation:
             "time": round(self.tick * self.config.dt, 2),
             "cells": len(living),
             "mean_morphogen": round(float(np.mean(self.world.morphogen)), 4),
+            "morphogen_mass": round(float(self.world.morphogen.sum() * self.world.spacing**2), 6),
             **counts,
         }

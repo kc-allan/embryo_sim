@@ -3,7 +3,13 @@ import numpy as np
 from core.world import World
 
 
-def advance_cell_cycles(world: World, dt: float, division_period: float, capacity: int) -> list:
+def advance_cell_cycles(
+    world: World,
+    dt: float,
+    division_period: float,
+    capacity: int,
+    enabled: bool = True,
+) -> list:
     """Advance cell cycles and return ready-to-divide cells in stable order."""
     living = [cell for cell in world.cells if cell.alive]
     if len(living) >= capacity:
@@ -11,6 +17,8 @@ def advance_cell_cycles(world: World, dt: float, division_period: float, capacit
     ready = []
     for cell in living:
         cell.age += dt
+        if not enabled or len(living) >= capacity:
+            continue
         nearby = sum(
             1 for other in living
             if other.id != cell.id

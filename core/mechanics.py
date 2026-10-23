@@ -3,7 +3,13 @@ import numpy as np
 from core.world import World
 
 
-def update_positions(world: World, dt: float, mobility: float, adhesion: float) -> None:
+def update_positions(
+    world: World,
+    dt: float,
+    mobility: float,
+    adhesion: float,
+    chemotaxis: bool = True,
+) -> None:
     """Resolve soft cell overlap, weak cohesion, and stem-cell chemotaxis."""
     cells = [cell for cell in world.cells if cell.alive]
     if not cells:
@@ -21,7 +27,7 @@ def update_positions(world: World, dt: float, mobility: float, adhesion: float) 
     pair_force = (-overlap * 1.8 + np.minimum(near, 1.2) * adhesion)[:, :, None] * direction
     forces += pair_force.sum(axis=1)
     for index, cell in enumerate(cells):
-        if cell.fate == 0:
+        if chemotaxis and cell.fate == 0:
             forces[index] += world.morphogen_gradient(cell.position) * 0.12
     next_positions = positions + mobility * dt * forces
     limit = world.size / 2.0 - radii

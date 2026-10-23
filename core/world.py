@@ -11,6 +11,7 @@ class World:
     grid_size: int = 128
     cells: list[Cell] = field(default_factory=list)
     morphogen: np.ndarray = field(init=False)
+    mass_history: list[dict[str, float | int]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.morphogen = np.zeros((self.grid_size, self.grid_size), dtype=float)
@@ -45,20 +46,77 @@ class World:
             (self.morphogen[down, ix] - self.morphogen[up, ix]) / dy,
         ])
 
-    def update_morphogen(self, dt: float, diffusion: float, decay: float, secretion: float) -> None:
+    def update_morphogen(
+        self,
+        dt: float,
+        diffusion: float,
+        decay: float,
+        secretion: float,
+        tick: int = 0,
+        enabled: bool = True,
+    ) -> dict[str, float | int]:
+        voxel_area = self.spacing**2
+        initial_mass = float(self.morphogen.sum() * voxel_area)
+        if not enabled:
+            self.morphogen.fill(0.0)
+            diagnostic = {
+                "tick": tick,
+                "initial_mass": initial_mass,
+                "diffusion_delta": 0.0,
+                "degradation_delta": 0.0,
+                "secretion_added": 0.0,
+                "uptake_removed": 0.0,
+                "clipping_removed": 0.0,
+                "boundary_removed": 0.0,
+                "final_mass": 0.0,
+                "residual": 0.0,
+            }
+            self.mass_history.append(diagnostic)
+            return diagnostic
+
+        old_field = self.morphogen.copy()
         padded = np.pad(self.morphogen, 1, mode="edge")
         laplacian = (
             padded[1:-1, :-2] + padded[1:-1, 2:]
             + padded[:-2, 1:-1] + padded[2:, 1:-1]
             - 4.0 * self.morphogen
         ) / self.spacing**2
+        diffusion_delta = float(dt * diffusion * laplacian.sum() * voxel_area)
+        degradation_delta = float(-dt * decay * old_field.sum() * voxel_area)
         self.morphogen += dt * (diffusion * laplacian - decay * self.morphogen)
+        secretion_added = 0.0
         for cell in self.cells:
             if cell.alive and cell.organizer:
                 x, y = self._grid_position(cell.position)
                 self.morphogen[int(round(y)), int(round(x))] += secretion * dt
+                secretion_added += secretion * dt * voxel_area
+        unclipped = self.morphogen.copy()
         np.clip(self.morphogen, 0.0, 1.0, out=self.morphogen)
+        clipping_removed = float((unclipped - self.morphogen).sum() * voxel_area)
+        boundary_removed = float(
+            self.morphogen[0, :].sum() + self.morphogen[-1, :].sum()
+            + self.morphogen[1:-1, 0].sum() + self.morphogen[1:-1, -1].sum()
+        ) * voxel_area
         self.morphogen[0, :] = 0.0
         self.morphogen[-1, :] = 0.0
         self.morphogen[:, 0] = 0.0
         self.morphogen[:, -1] = 0.0
+        final_mass = float(self.morphogen.sum() * voxel_area)
+        expected_mass = (
+            initial_mass + diffusion_delta + degradation_delta + secretion_added
+            - clipping_removed - boundary_removed
+        )
+        diagnostic = {
+            "tick": tick,
+            "initial_mass": initial_mass,
+            "diffusion_delta": diffusion_delta,
+            "degradation_delta": degradation_delta,
+            "secretion_added": float(secretion_added),
+            "uptake_removed": 0.0,
+            "clipping_removed": clipping_removed,
+            "boundary_removed": boundary_removed,
+            "final_mass": final_mass,
+            "residual": final_mass - expected_mass,
+        }
+        self.mass_history.append(diagnostic)
+        return diagnostic
