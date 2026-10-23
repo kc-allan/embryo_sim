@@ -1,8 +1,24 @@
 from dataclasses import dataclass, field
+from typing import TypedDict
 
 import numpy as np
+from numpy.typing import NDArray
 
 from biology.cell import Cell
+
+
+class MassDiagnostic(TypedDict):
+    tick: int
+    initial_mass: float
+    diffusion_delta: float
+    degradation_delta: float
+    secretion_added: float
+    uptake_removed: float
+    field_reset_removed: float
+    clipping_removed: float
+    boundary_removed: float
+    final_mass: float
+    residual: float
 
 
 @dataclass
@@ -10,8 +26,8 @@ class World:
     size: float = 80.0
     grid_size: int = 128
     cells: list[Cell] = field(default_factory=list)
-    morphogen: np.ndarray = field(init=False)
-    mass_history: list[dict[str, float | int]] = field(default_factory=list)
+    morphogen: NDArray[np.float64] = field(init=False)
+    mass_history: list[MassDiagnostic] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.size <= 0 or self.grid_size < 3:
@@ -22,14 +38,14 @@ class World:
     def spacing(self) -> float:
         return self.size / self.grid_size
 
-    def _grid_position(self, position: np.ndarray) -> tuple[float, float]:
+    def _grid_position(self, position: NDArray[np.float64]) -> tuple[float, float]:
         # Cell-centered grid: its edge cells represent half-width boundary
         # volumes and interpolation coordinates are measured from cell centers.
         x = (position[0] + self.size / 2.0) / self.spacing - 0.5
         y = (position[1] + self.size / 2.0) / self.spacing - 0.5
         return float(np.clip(x, 0, self.grid_size - 1)), float(np.clip(y, 0, self.grid_size - 1))
 
-    def sample_morphogen(self, position: np.ndarray) -> float:
+    def sample_morphogen(self, position: NDArray[np.float64]) -> float:
         x, y = self._grid_position(position)
         x0, y0 = int(x), int(y)
         x1, y1 = min(x0 + 1, self.grid_size - 1), min(y0 + 1, self.grid_size - 1)
@@ -38,7 +54,7 @@ class World:
         bottom = self.morphogen[y1, x0] * (1 - fx) + self.morphogen[y1, x1] * fx
         return float(top * (1 - fy) + bottom * fy)
 
-    def morphogen_gradient(self, position: np.ndarray) -> np.ndarray:
+    def morphogen_gradient(self, position: NDArray[np.float64]) -> NDArray[np.float64]:
         x, y = self._grid_position(position)
         ix, iy = int(round(x)), int(round(y))
         left, right = max(ix - 1, 0), min(ix + 1, self.grid_size - 1)
@@ -59,7 +75,7 @@ class World:
         tick: int = 0,
         enabled: bool = True,
         record: bool = True,
-    ) -> dict[str, float | int]:
+    ) -> MassDiagnostic:
         voxel_area = self.spacing**2
         initial_mass = float(self.morphogen.sum() * voxel_area)
         if dt < 0 or diffusion < 0 or decay < 0 or secretion < 0:
@@ -69,7 +85,7 @@ class World:
             raise ValueError("explicit field update violates the nonnegative stability bound")
         if not enabled:
             self.morphogen.fill(0.0)
-            diagnostic = {
+            diagnostic: MassDiagnostic = {
                 "tick": tick,
                 "initial_mass": initial_mass,
                 "diffusion_delta": 0.0,

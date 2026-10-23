@@ -2,6 +2,7 @@
 
 from dataclasses import asdict, replace
 import json
+from typing import Any
 
 import numpy as np
 
@@ -10,7 +11,7 @@ from core.simulation import Simulation, SimulationConfig
 from core.mechanics import MECHANICS_MODEL_VERSION
 
 
-def describe(simulation: Simulation) -> dict:
+def describe(simulation: Simulation) -> dict[str, Any]:
     cells = [cell for cell in simulation.world.cells if cell.alive]
     counts = {name: 0 for name in FATE_NAMES}
     centroids = {}
@@ -43,9 +44,9 @@ def describe(simulation: Simulation) -> dict:
         name: round(count / len(cells), 5) if cells else 0.0
         for name, count in counts.items()
     }
-    transition_signal = {}
+    transition_signal: dict[str, list[float]] = {}
     for event in simulation.events:
-        if event.get("type") == "fate_transition":
+        if event["type"] == "fate_transition":
             transition_signal.setdefault(event["to"], []).append(float(event["signal"]))
     transition_exposure = {
         fate: {"count": len(values), "mean_signal": round(float(np.mean(values)), 5)}
@@ -89,7 +90,8 @@ def describe(simulation: Simulation) -> dict:
     }
 
 
-def run_case(name: str, config: SimulationConfig, seed: int, duration: float) -> dict:
+def run_case(name: str, config: SimulationConfig, seed: int,
+             duration: float) -> dict[str, Any]:
     steps = round(duration / config.dt)
     simulation = Simulation(seed=seed, config=config)
     simulation.run(steps)

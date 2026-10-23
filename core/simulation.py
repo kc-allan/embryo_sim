@@ -1,11 +1,14 @@
 from dataclasses import dataclass
+from typing import cast
+from collections.abc import Mapping
 
 import numpy as np
 
-from biology.cell import Cell, FATE_NAMES
+from biology.cell import Cell, CellHistoryEntry, FATE_NAMES
 from biology.differentiation import update_fate
 from biology.gene_regulation import update_expression
 from core.mechanics import update_positions
+from core.events import SimulationEvent
 from core.scheduler import advance_cell_cycles
 from core.world import World
 
@@ -63,9 +66,9 @@ class Simulation:
         self.world = World(size=self.config.world_size, grid_size=self.config.grid_size)
         self.tick = 0
         self.next_cell_id = 1
-        self.events: list[dict] = []
-        self.metrics: list[dict] = []
-        self.snapshots: list[list[dict]] = []
+        self.events: list[SimulationEvent] = []
+        self.metrics: list[dict[str, int | float]] = []
+        self.snapshots: list[list[dict[str, object]]] = []
         self.mass_totals = {key: 0.0 for key in (
             "diffusion_delta", "degradation_delta", "secretion_added",
             "uptake_removed", "field_reset_removed", "clipping_removed", "boundary_removed",
@@ -94,8 +97,9 @@ class Simulation:
             enabled=config.signaling_enabled,
             record=config.recording_mode == "trace",
         )
+        numeric_diagnostics = cast(Mapping[str, float | int], mass_diagnostic)
         for key in self.mass_totals:
-            self.mass_totals[key] += float(mass_diagnostic[key])
+            self.mass_totals[key] += float(numeric_diagnostics[key])
         self.max_mass_balance_residual = max(
             self.max_mass_balance_residual, abs(float(mass_diagnostic["residual"]))
         )
@@ -187,7 +191,7 @@ class Simulation:
         for cell in self.world.cells:
             if not cell.alive or config.recording_mode != "trace":
                 continue
-            cell.history.append({
+            history_entry: CellHistoryEntry = {
                 "tick": self.tick,
                 "time": self.tick * dt,
                 "age": cell.age,
@@ -196,7 +200,8 @@ class Simulation:
                 "signal": self.world.sample_morphogen(cell.position),
                 "gene_expression": cell.gene_expression.tolist(),
                 "cycle_progress": cell.cycle_progress,
-            })
+            }
+            cell.history.append(history_entry)
         return self.world
 
     def run(self, steps: int) -> World:

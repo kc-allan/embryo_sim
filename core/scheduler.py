@@ -1,13 +1,14 @@
 """Cell-cycle progression and capacity-aware division eligibility."""
 
 import numpy as np
+from biology.cell import Cell
 
 from core.spatial_index import SpatialIndex
 from core.world import World
 
 
 def advance_cell_cycles(world: World, dt: float, division_period: float,
-                        capacity: int, enabled: bool = True) -> list:
+                        capacity: int, enabled: bool = True) -> list[Cell]:
     """Age all living cells; return ready cells that fit current capacity.
 
     Capacity limits new cells only. At capacity, cycles can reach (and remain
@@ -25,7 +26,7 @@ def advance_cell_cycles(world: World, dt: float, division_period: float,
     max_radius = max(cell.radius for cell in living)
     search_radius = 2.0 * max_radius + 1.0
     index = SpatialIndex(living, max(search_radius, 1e-9))
-    ready = []
+    ready: list[Cell] = []
     for i, cell in enumerate(living):
         nearby = 0
         query_radius = cell.radius + max_radius + 1.0

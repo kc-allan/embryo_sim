@@ -3,7 +3,8 @@ import json
 import sys
 from dataclasses import replace
 
-from biology.cell import FATE_NAMES
+from biology.cell import Cell, FATE_NAMES
+from core.events import SimulationEvent
 from core.simulation import Simulation, SimulationConfig
 from visualization.renderer import render_svg
 
@@ -25,27 +26,23 @@ def _print_cell_trace(simulation: Simulation, cell_id: int) -> None:
         return
 
     lineage = []
-    ancestor = cell
+    ancestor: Cell | None = cell
     while ancestor is not None:
         lineage.append(ancestor.id)
+        if ancestor.parent_id is None:
+            break
         ancestor = cells.get(ancestor.parent_id)
     lineage.reverse()
     lineage_set = set(lineage)
     print(f"cell {cell_id} lineage: {' -> '.join(map(str, lineage))}", file=sys.stderr)
 
-    lineage_events = [
-        event for event in simulation.events
-        if (
-            event["type"] == "fate_transition"
-            and event.get("cell_id") in lineage_set
-        ) or (
-            event["type"] == "division"
-            and (
-                event.get("daughter_id") in lineage_set
-                or event.get("parent_id") == cell_id
-            )
-        )
-    ]
+    lineage_events: list[SimulationEvent] = []
+    for event in simulation.events:
+        if event["type"] == "fate_transition":
+            if event["cell_id"] in lineage_set:
+                lineage_events.append(event)
+        elif event["daughter_id"] in lineage_set or event["parent_id"] == cell_id:
+            lineage_events.append(event)
     for event in lineage_events:
         print(json.dumps(event, sort_keys=True), file=sys.stderr)
 
@@ -81,8 +78,8 @@ def main() -> None:
         simulation.run(steps)
     else:
         if verbosity >= 3:
-            config = vars(simulation.config)
-            print(f"configuration: {json.dumps(config, sort_keys=True)}", file=sys.stderr)
+            configuration = vars(simulation.config)
+            print(f"configuration: {json.dumps(configuration, sort_keys=True)}", file=sys.stderr)
 
         progress_interval = max(1, (steps + 9) // 10)
         for step in range(1, steps + 1):

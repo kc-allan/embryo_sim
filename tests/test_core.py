@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from biology.cell import Cell
+from biology.cell import Cell, Fate
 from core.mechanics import mechanical_forces_indexed, mechanical_forces_reference, update_positions
 from core.scheduler import advance_cell_cycles
 from core.spatial_index import SpatialIndex
@@ -14,13 +14,14 @@ from biology.regulatory_toggle import (
 from analysis.experiments import describe
 
 
-def cell(identifier, x, y=0.0, radius=1.0, fate=1):
+def cell(identifier: int, x: float, y: float = 0.0, radius: float = 1.0,
+         fate: Fate = 1) -> Cell:
     return Cell(identifier, None, np.array([x, y], dtype=float), radius,
                 0.0, 0.0, np.zeros(2), fate=fate)
 
 
 class SchedulerTests(unittest.TestCase):
-    def test_age_and_cycle_continue_at_capacity(self):
+    def test_age_and_cycle_continue_at_capacity(self) -> None:
         a, b = cell(1, 0), cell(2, 50)
         world = World(cells=[a, b])
         ready = advance_cell_cycles(world, 0.5, 1.0, 2)
@@ -28,14 +29,14 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual((a.age, b.age), (0.5, 0.5))
         self.assertEqual((a.cycle_progress, b.cycle_progress), (0.5, 0.5))
 
-    def test_disabled_proliferation_ages_without_cycle_progress(self):
+    def test_disabled_proliferation_ages_without_cycle_progress(self) -> None:
         a = cell(1, 0)
         a.cycle_progress = 0.4
         self.assertEqual(advance_cell_cycles(World(cells=[a]), 0.25, 1.0, 5, False), [])
         self.assertEqual(a.age, 0.25)
         self.assertEqual(a.cycle_progress, 0.4)
 
-    def test_capacity_returns_only_available_divisions(self):
+    def test_capacity_returns_only_available_divisions(self) -> None:
         cells = [cell(i, i * 10.0) for i in range(3)]
         for item in cells:
             item.cycle_progress = 1.0
@@ -45,7 +46,7 @@ class SchedulerTests(unittest.TestCase):
 
 
 class FieldTests(unittest.TestCase):
-    def test_no_flux_diffusion_conserves_integrated_mass(self):
+    def test_no_flux_diffusion_conserves_integrated_mass(self) -> None:
         world = World(size=10.0, grid_size=11)
         rng = np.random.default_rng(2)
         world.morphogen[:] = rng.random(world.morphogen.shape)
@@ -55,7 +56,7 @@ class FieldTests(unittest.TestCase):
         self.assertAlmostEqual(before, after, places=12)
         self.assertTrue(np.all(world.morphogen >= 0))
 
-    def test_decay_and_bilinear_secretion_mass(self):
+    def test_decay_and_bilinear_secretion_mass(self) -> None:
         world = World(size=10.0, grid_size=11)
         world.morphogen.fill(1.0)
         world.update_morphogen(0.1, 0.0, 0.2, 0.0)
@@ -75,11 +76,11 @@ class FieldTests(unittest.TestCase):
             edge_world.update_morphogen(0.1, 0.0, 0.0, 2.0)
             self.assertAlmostEqual(edge_world.morphogen.sum() * edge_world.spacing**2, 0.2)
 
-    def test_explicit_instability_is_rejected(self):
+    def test_explicit_instability_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             World(size=10, grid_size=11).update_morphogen(1, 10, 0, 0)
 
-    def test_disabled_field_clearing_is_accounted_as_removal(self):
+    def test_disabled_field_clearing_is_accounted_as_removal(self) -> None:
         world = World(size=10, grid_size=10)
         world.morphogen.fill(0.5)
         row = world.update_morphogen(0.1, 0.2, 0.1, 1.0, enabled=False)
@@ -88,7 +89,7 @@ class FieldTests(unittest.TestCase):
         self.assertEqual(row["uptake_removed"], 0.0)
         self.assertEqual(row["residual"], 0.0)
 
-    def test_diffusion_grid_refinement_reduces_analytic_mode_error(self):
+    def test_diffusion_grid_refinement_reduces_analytic_mode_error(self) -> None:
         errors = []
         length, diffusion, duration = 10.0, 0.2, 0.5
         for count in (20, 40, 80):
@@ -107,7 +108,7 @@ class FieldTests(unittest.TestCase):
         self.assertGreater(errors[0], errors[1])
         self.assertGreater(errors[1], errors[2])
 
-    def test_diffusion_time_refinement_reduces_euler_error(self):
+    def test_diffusion_time_refinement_reduces_euler_error(self) -> None:
         count, length, diffusion, duration = 32, 10.0, 0.2, 0.5
         world = World(size=length, grid_size=count)
         dx = world.spacing
@@ -129,7 +130,7 @@ class FieldTests(unittest.TestCase):
 
 
 class MechanicsTests(unittest.TestCase):
-    def test_pair_force_cutoff_overlap_and_coincident(self):
+    def test_pair_force_cutoff_overlap_and_coincident(self) -> None:
         cells = [cell(0, 0), cell(1, 2.5), cell(2, 20), cell(3, 0)]
         forces = mechanical_forces_reference(cells)
         self.assertTrue(np.all(np.isfinite(forces)))
@@ -137,19 +138,25 @@ class MechanicsTests(unittest.TestCase):
         self.assertGreater(np.linalg.norm(forces[0]), 0.0)
         self.assertTrue(np.allclose(forces[2], 0.0))
 
-    def test_spatial_hash_matches_all_pairs(self):
+    def test_spatial_hash_matches_all_pairs(self) -> None:
         rng = np.random.default_rng(7)
-        cells = [cell(i, *rng.uniform(-10, 10, 2), radius=rng.uniform(0.5, 1.5))
-                 for i in range(120)]
+        cells = []
+        for i in range(120):
+            position = rng.uniform(-10, 10, 2)
+            cells.append(cell(i, float(position[0]), float(position[1]),
+                              radius=float(rng.uniform(0.5, 1.5))))
         cells.extend([cell(120, 1, 1), cell(121, 1, 1)])
         ref = mechanical_forces_reference(cells)
         fast = mechanical_forces_indexed(cells)
         np.testing.assert_allclose(fast, ref, rtol=0, atol=1e-12)
 
-    def test_indexed_neighbors_match_brute_force_counts(self):
+    def test_indexed_neighbors_match_brute_force_counts(self) -> None:
         rng = np.random.default_rng(9)
-        cells = [cell(i, *rng.uniform(-20, 20, 2), radius=rng.uniform(0.5, 2.0))
-                 for i in range(150)]
+        cells = []
+        for i in range(150):
+            position = rng.uniform(-20, 20, 2)
+            cells.append(cell(i, float(position[0]), float(position[1]),
+                              radius=float(rng.uniform(0.5, 2.0))))
         index = SpatialIndex(cells, 5.0)
         for i, current in enumerate(cells):
             actual = sum(
@@ -164,7 +171,7 @@ class MechanicsTests(unittest.TestCase):
             )
             self.assertEqual(actual, expected)
 
-    def test_hard_wall_keeps_cell_centers_inside_radius_adjusted_domain(self):
+    def test_hard_wall_keeps_cell_centers_inside_radius_adjusted_domain(self) -> None:
         item = cell(0, 20.0, -20.0, radius=1.0)
         world = World(size=10.0, grid_size=10, cells=[item])
         update_positions(world, 0.1, 0.1, 0.035, chemotaxis=False)
@@ -172,7 +179,7 @@ class MechanicsTests(unittest.TestCase):
 
 
 class RecordingTests(unittest.TestCase):
-    def test_recording_modes_do_not_change_trajectory(self):
+    def test_recording_modes_do_not_change_trajectory(self) -> None:
         summaries = []
         for mode in ("minimal", "standard", "trace"):
             sim = Simulation(4, SimulationConfig(max_cells=24, recording_mode=mode,
@@ -190,7 +197,7 @@ class RecordingTests(unittest.TestCase):
         self.assertEqual(summaries[0], summaries[1])
         self.assertEqual(summaries[1], summaries[2])
 
-    def test_experiment_summary_preserves_categorical_fates(self):
+    def test_experiment_summary_preserves_categorical_fates(self) -> None:
         simulation = Simulation(2, SimulationConfig(max_cells=1, recording_mode="minimal"))
         simulation.run(1)
         result = describe(simulation)
@@ -200,19 +207,19 @@ class RecordingTests(unittest.TestCase):
 
 
 class RegulatoryToggleTests(unittest.TestCase):
-    def test_default_parameters_have_two_stable_states_and_a_saddle(self):
+    def test_default_parameters_have_two_stable_states_and_a_saddle(self) -> None:
         points = analyze_fixed_points()
         self.assertEqual(len(points), 3)
         self.assertEqual(sum(point["stable"] for point in points), 2)
         self.assertTrue(all(point["residual_norm"] < 1e-5 for point in points))
 
-    def test_signal_pulse_can_leave_a_maintained_induced_state(self):
+    def test_signal_pulse_can_leave_a_maintained_induced_state(self) -> None:
         result = signal_pulse_experiment()
         after = np.array(result["after_withdrawal"])
         self.assertGreater(after[0], 1.5)
         self.assertLess(after[1], 0.3)
 
-    def test_initial_conditions_select_distinct_unforced_attractors(self):
+    def test_initial_conditions_select_distinct_unforced_attractors(self) -> None:
         low_a = signal_pulse_experiment(duration=100, pulse_duration=0,
                                         initial=(2.0, 0.05))
         low_b = signal_pulse_experiment(duration=100, pulse_duration=0,
@@ -220,7 +227,7 @@ class RegulatoryToggleTests(unittest.TestCase):
         self.assertGreater(low_a["after_withdrawal"][0], low_a["after_withdrawal"][1])
         self.assertGreater(low_b["after_withdrawal"][1], low_b["after_withdrawal"][0])
 
-    def test_induction_strength_and_integration_step_are_explicit(self):
+    def test_induction_strength_and_integration_step_are_explicit(self) -> None:
         mild = signal_pulse_experiment(signal=0.2, pulse_duration=2.0)
         strong = signal_pulse_experiment(signal=1.0, pulse_duration=2.0)
         self.assertGreater(strong["after_pulse"][0], mild["after_pulse"][0])
@@ -229,7 +236,7 @@ class RegulatoryToggleTests(unittest.TestCase):
         np.testing.assert_allclose(coarse["after_withdrawal"],
                                    fine["after_withdrawal"], atol=2e-4, rtol=0)
 
-    def test_regulatory_state_persists_through_repeated_signal_changes(self):
+    def test_regulatory_state_persists_through_repeated_signal_changes(self) -> None:
         result = signal_sequence_experiment(
             (0.05, 2.0), [(1.0, 10.0), (0.0, 30.0), (0.2, 5.0), (0.0, 30.0)]
         )

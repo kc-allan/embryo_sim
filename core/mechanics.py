@@ -1,14 +1,20 @@
 """Versioned, finite-range mechanics for the center-based 2D model."""
 
-import numpy as np
+from typing import Sequence, TypeAlias
 
+import numpy as np
+from numpy.typing import NDArray
+
+from biology.cell import Cell
 from core.spatial_index import SpatialIndex
 from core.world import World
 
 MECHANICS_MODEL_VERSION = "finite-range-v2"
+FloatArray: TypeAlias = NDArray[np.float64]
 
 
-def _pair_direction(a, b, id_a: int, id_b: int) -> np.ndarray:
+def _pair_direction(a: FloatArray, b: FloatArray, id_a: int,
+                    id_b: int) -> tuple[FloatArray, float]:
     delta = b - a
     distance = float(np.linalg.norm(delta))
     if distance > 1e-12:
@@ -17,8 +23,8 @@ def _pair_direction(a, b, id_a: int, id_b: int) -> np.ndarray:
     return (np.array([1.0, 0.0]) if id_a < id_b else np.array([-1.0, 0.0])), 0.0
 
 
-def _pair_force(cell_i, cell_j, repulsion: float, adhesion: float,
-                adhesion_range: float) -> np.ndarray:
+def _pair_force(cell_i: Cell, cell_j: Cell, repulsion: float, adhesion: float,
+                adhesion_range: float) -> FloatArray:
     direction, distance = _pair_direction(
         cell_i.position, cell_j.position, cell_i.id, cell_j.id
     )
@@ -32,8 +38,9 @@ def _pair_force(cell_i, cell_j, repulsion: float, adhesion: float,
     return scalar * direction
 
 
-def mechanical_forces_reference(cells, repulsion=1.8, adhesion=0.035,
-                                adhesion_range=1.2) -> np.ndarray:
+def mechanical_forces_reference(cells: Sequence[Cell], repulsion: float = 1.8,
+                                adhesion: float = 0.035,
+                                adhesion_range: float = 1.2) -> FloatArray:
     """Simple O(N²) reference force calculation, including each pair once."""
     if repulsion < 0 or adhesion < 0 or adhesion_range <= 0:
         raise ValueError("mechanics parameters must be nonnegative and range positive")
@@ -47,8 +54,9 @@ def mechanical_forces_reference(cells, repulsion=1.8, adhesion=0.035,
     return forces
 
 
-def mechanical_forces_indexed(cells, repulsion=1.8, adhesion=0.035,
-                               adhesion_range=1.2) -> np.ndarray:
+def mechanical_forces_indexed(cells: Sequence[Cell], repulsion: float = 1.8,
+                              adhesion: float = 0.035,
+                              adhesion_range: float = 1.2) -> FloatArray:
     """Spatial-hash implementation equivalent to the reference force law."""
     if repulsion < 0 or adhesion < 0 or adhesion_range <= 0:
         raise ValueError("mechanics parameters must be nonnegative and range positive")

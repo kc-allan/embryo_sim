@@ -3,7 +3,9 @@
 import json
 import tempfile
 import time
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -17,7 +19,7 @@ from core.world import World
 from visualization.renderer import render_svg
 
 
-def timed(function, repeats=3):
+def timed(function: Callable[[], Any], repeats: int = 3) -> float:
     function()  # warm-up
     start = time.perf_counter()
     for _ in range(repeats):
@@ -25,8 +27,9 @@ def timed(function, repeats=3):
     return (time.perf_counter() - start) / repeats
 
 
-def benchmark(sizes=(100, 300, 1000, 3000), seed=123):
-    report = {"seed": seed, "units": "seconds per operation", "populations": []}
+def benchmark(sizes: Sequence[int] = (100, 300, 1000, 3000),
+              seed: int = 123) -> dict[str, Any]:
+    report: dict[str, Any] = {"seed": seed, "units": "seconds per operation", "populations": []}
     rng = np.random.default_rng(seed)
     for count in sizes:
         positions = rng.uniform(-400, 400, (count, 2))

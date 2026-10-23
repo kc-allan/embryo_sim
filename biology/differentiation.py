@@ -1,4 +1,7 @@
-def update_fate(cell, morphogen: float) -> None:
+from biology.cell import Cell
+
+
+def update_fate(cell: Cell, morphogen: float) -> None:
     """Assign a model fate, allowing Type B to refine into Type A."""
     if cell.fate not in (0, 2):
         return
